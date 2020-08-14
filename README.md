@@ -1,1 +1,1 @@
-# FOMOandOpportunityCost
+# FOMO and Opportunity Cost
