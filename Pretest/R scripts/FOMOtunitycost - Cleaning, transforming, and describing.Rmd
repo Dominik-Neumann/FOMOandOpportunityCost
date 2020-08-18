@@ -1,0 +1,871 @@
+---
+title: "Cleaning, transforming, and describing"
+output: html_notebook
+---
+
+Author: Dominik Neumann<br>
+<i>Michigan State University</i><br>
+
+## Study design
+
+<p style="text-indent: 25px;">In this pre-test we were intersted in perceptions of various activities consumers could engage in. We used a set of 52 individual activities that were phrased like something consumers could engage in throughout their lifetime. We randomly assigned paritcipants to one of two conditions. In the "by themselves"-condition the activities of interest were phrased as if the participant would be engaging in the activity by themselves (e.g., "A trip for you to dive with sharks alongside shark week experts from Discovery Channel") in the "with their friends"-condition, the same set of activities were phrased as to be engaged in together with the participant's best friends (e.g., "A trip for you and your best friends dive with sharks alongside shark week experts from Discovery Channel"). Each participant was randomly assigned to 26 of 52 possible activities in random order within their respective condition.</p>
+
+```{r global_options, include = FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+```{r results = FALSE}
+# General libraries
+library(tidyverse)
+library(psych)
+library(plyr)
+
+# Demographics
+library(table1)
+library(htmltools)
+
+# Factor analysis
+library(lavaan)
+
+# Correlations
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(sjstats)
+library(pastecs)
+
+# Convert data to long
+to_long <- function(originalDataSet, keyitem, itemPraefix, category, value, selectionname1, selectionname2){
+  dat_temp <- originalDataSet %>%
+  dplyr::select(keyitem, ends_with(itemPraefix))        # Select key variable, such as participant "ID" and ending of variable to be retained as value
+  dat_temp_long <- gather(dat_temp, category, value, all_of(selectionname1):all_of(selectionname2), factor_key = TRUE)}       # use of gather function  
+
+# APA style charts
+apatheme <- theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(),
+        text = element_text(family = 'Times'))
+
+# Jamie theme for density plots
+jamie.theme <- theme_bw() + theme(axis.line = element_line(colour = "black"), 
+    panel.grid.minor = element_blank(), panel.grid.major = element_blank(), 
+    panel.border = element_blank(), panel.background = element_blank(), legend.title = element_blank())
+
+# Create a construct and retrieve Cronbach's alpha
+constructCreation <- function(originalDataSet, itemPrefix, constructName){
+  dat_temp <- originalDataSet %>%
+    dplyr::select(starts_with(itemPrefix))
+  alphaScores <- alpha(dat_temp)
+  originalDataSet$constructName <- rowMeans(dat_temp)
+  print(alphaScores)
+  return(originalDataSet)}
+
+# Drop lists
+drop_descriptives <- c("item", "vars", "trimmed", "mad")
+drop_summarystats <- c("nbr.val", "nbr.null", "nbr.na", "min", "max", "range", "sum", "SE.mean", "CI.mean.0.95", "var", "coef.var")
+```
+
+```{r results = FALSE}
+# Use RESIST_Demographics.csv here
+dat_demographics <- read.csv("/Users/dmnknmnn/Dropbox/Rhodes & Neumann/Rhodes - Summer research funding/FOMO and Opportunity cost/Pretest/Data/FOMOtunityCost - Pretest Demographics.csv")
+# Use RESIST_MessagePerceptions.csv here
+dat_messages <- read.csv("/Users/dmnknmnn/Dropbox/Rhodes & Neumann/Rhodes - Summer research funding/FOMO and Opportunity cost/Pretest/Data/FOMOtunityCost - Pretest MessagePerceptions.csv")
+dat_demographics[dat_demographics == -99] <- NA
+dat_messages[dat_messages == -99] <- NA
+```
+
+```{r results = FALSE}
+# ID's as factors for later analysis
+dat_demographics$id <- as.factor(dat_demographics$id)
+dat_messages$id <- as.factor(dat_messages$id)
+
+# Re-ordering factors
+dat_demographics$education <- factor(dat_demographics$education, levels = c("Less than high school degree", "High school graduate", "Some college but no degree", "Bachelor's degree", "Associate degree", "Master's degree", "Doctoral degree", "Professional degree"))
+dat_demographics$income <- factor(dat_demographics$income, levels = c("Less than $10,000", "$10,000 to $49,999", "$50,000 to $99,999", "$100,000 to $149,999", "$150,000 or more"))
+dat_demographics$sexuality <- factor(dat_demographics$sexuality, levels = c("Heterosexual or straight", "Homosexual", "Bisexual", "Prefer not to say"))
+dat_demographics$race <- factor(dat_demographics$race, levels = c("White or Caucasian", "Black or African American", "Asian", "Mixed", "Other"))
+dat_demographics$ethnicity <- factor(dat_demographics$ethnicity, levels = c("Not Hispanic", "Hispanic"))
+```
+
+```{r}
+# Subsetting for condition 'by themselves'
+dat_alone <- dat_messages %>%
+  dplyr::select("id", ends_with("_alone"))
+dat_alone <- dat_alone[!apply(is.na(dat_alone[,2:365]), 1, all),]
+dat_alone$condition <- "By themselves"
+names(dat_alone) <- str_remove(names(dat_alone), "_alone")
+names(dat_alone) <- str_remove(names(dat_alone), "X")
+
+# Subsetting for condiiton 'with friends'
+dat_friends <- dat_messages %>%
+  dplyr::select("id", ends_with("_friends"))
+dat_friends <- dat_friends[!apply(is.na(dat_friends[,2:365]), 1, all),]
+dat_friends$condition <- "With their friends"
+names(dat_friends) <- str_remove(names(dat_friends), "_friends")
+names(dat_friends) <- str_remove(names(dat_friends), "X")
+
+# Combining condition-subsets
+dat_messages_clean <- rbind(dat_alone, dat_friends)
+
+# Transforming to long data
+dat_condition <- dat_messages_clean %>%
+  dplyr::select("id", "condition")
+
+dat_attractive_long <- to_long(dat_messages_clean, "id", "_attractive", "message", "attractive", "activity_01_attractive", "activity_52_attractive")
+names(dat_attractive_long)[names(dat_attractive_long) == 'category'] = "message"
+names(dat_attractive_long)[names(dat_attractive_long) == 'value'] = "attractive"
+dat_attractive_long$message <- unlist(strsplit(as.character(dat_attractive_long$message), split = '_attractive', fixed = TRUE))
+
+dat_popular_long <- to_long(dat_messages_clean, "id", "_popular", "message", "popular", "activity_01_popular", "activity_52_popular")
+names(dat_popular_long)[names(dat_popular_long) == 'category'] = "message"
+names(dat_popular_long)[names(dat_popular_long) == 'value'] = "popular"
+dat_popular_long$message <- unlist(strsplit(as.character(dat_popular_long$message), split = '_popular', fixed = TRUE))
+
+dat_unique_long <- to_long(dat_messages_clean, "id", "_unique", "message", "unique", "activity_01_unique", "activity_52_unique")
+names(dat_unique_long)[names(dat_unique_long) == 'category'] = "message"
+names(dat_unique_long)[names(dat_unique_long) == 'value'] = "unique"
+dat_unique_long$message <- unlist(strsplit(as.character(dat_unique_long$message), split = '_unique', fixed = TRUE))
+
+dat_familiar_long <- to_long(dat_messages_clean, "id", "_familiar", "message", "familiar", "activity_01_familiar", "activity_52_familiar")
+names(dat_familiar_long)[names(dat_familiar_long) == 'category'] = "message"
+names(dat_familiar_long)[names(dat_familiar_long) == 'value'] = "familiar"
+dat_familiar_long$message <- unlist(strsplit(as.character(dat_familiar_long$message), split = '_familiar', fixed = TRUE))
+
+dat_selfrelevance_long <- to_long(dat_messages_clean, "id", "_selfrelevance", "message", "selfrelevance", "activity_01_selfrelevance", "activity_52_selfrelevance")
+names(dat_selfrelevance_long)[names(dat_selfrelevance_long) == 'category'] = "message"
+names(dat_selfrelevance_long)[names(dat_selfrelevance_long) == 'value'] = "selfrelevance"
+dat_selfrelevance_long$message <- unlist(strsplit(as.character(dat_selfrelevance_long$message), split = '_selfrelevance', fixed = TRUE))
+
+dat_experiencedfomo_long <- to_long(dat_messages_clean, "id", "_experiencedfomo", "message", "experiencedfomo", "activity_01_experiencedfomo", "activity_52_experiencedfomo")
+names(dat_experiencedfomo_long)[names(dat_experiencedfomo_long) == 'category'] = "message"
+names(dat_experiencedfomo_long)[names(dat_experiencedfomo_long) == 'value'] = "experiencedfomo"
+dat_experiencedfomo_long$message <- unlist(strsplit(as.character(dat_experiencedfomo_long$message), split = '_experiencedfomo', fixed = TRUE))
+
+dat_repeatability_long <- to_long(dat_messages_clean, "id", "_repeatability", "message", "repeatability", "activity_01_repeatability", "activity_52_repeatability")
+names(dat_repeatability_long)[names(dat_repeatability_long) == 'category'] = "message"
+names(dat_repeatability_long)[names(dat_repeatability_long) == 'value'] = "repeatability"
+dat_repeatability_long$message <- unlist(strsplit(as.character(dat_repeatability_long$message), split = '_repeatability', fixed = TRUE))
+
+# Merging long data subsets
+dat_messages_clean <- merge(dat_condition, dat_attractive_long, by = "id")
+dat_messages_clean <- merge(dat_messages_clean, dat_popular_long, by = c("id", "message"))
+dat_messages_clean <- merge(dat_messages_clean, dat_unique_long, by = c("id", "message"))
+dat_messages_clean <- merge(dat_messages_clean, dat_familiar_long, by = c("id", "message"))
+dat_messages_clean <- merge(dat_messages_clean, dat_selfrelevance_long, by = c("id", "message"))
+dat_messages_clean <- merge(dat_messages_clean, dat_experiencedfomo_long, by = c("id", "message"))
+dat_messages_clean <- merge(dat_messages_clean, dat_repeatability_long, by = c("id", "message"))
+
+# Remove missing values
+dat_messages_clean <- dat_messages_clean[!apply(is.na(dat_messages_clean[,4:10]), 1, all),]
+```
+
+## Sample
+
+<p style="text-indent: 25px;">Overall, N = 182 participants were recruited to answer this online survey. We excluded 19 participants who did not indicate to provide best quality data. We excluded 9 participants who did not provide informed consent, 64 participants who were too old (older than 50 years old), and four participants who did not complete the survey for any other reasons. Thus, the sample of this pre-test consisted of 86 participants between 21-50 years old (43 participants in each condition). The mean age was 36.4 years (SD = 8.09). Most participants identified as Caucasian (69.8%), who had at least a Bachelor's degree (67.5%) with an average household income of more than $50,000 (61.6%) </p>
+
+```{r}
+dat_demographics <- merge(dat_demographics, dat_condition, by = "id")
+```
+
+```{r results = FALSE}
+label(dat_demographics$age) <- "Age"
+label(dat_demographics$ethnicity) <- "Ethnicity"
+label(dat_demographics$race) <- "Race"
+label(dat_demographics$education) <- "Highest education"
+label(dat_demographics$income) <- "Household income"
+
+units(dat_demographics$age) <- "Years"
+units(dat_demographics$income) <- "U.S. Dollar p.a."
+
+table_generaldemographics <- table1(~ age + ethnicity + race + education + income | condition, data = dat_demographics)
+```
+
+## Constructs
+
+<p style="text-indent: 25px;"><b>Trait-FOMO.</b> We assessed participants' trait Fear of Missing Out based on a 16-item scale developed by Neumann and Rhodes (2020). The scale consists of four dimensions: tendency to socially compare (&alpha; = 0.82, e.g., "You think your friends have more fun than you."), dispositional counterfactual thinking (&alpha; = 0.85, e.g., "You think of all the things you wish you would have done differently."), sensitivity to missed opportunities (&alpha; = 0.83, e.g., "You go back and think about what you could have had."), and trait negative affect (&alpha = 0.85, e.g., "You feel lonely.").</p>
+
+```{r}
+# Fear of Missing Out
+dat_demographics <- constructCreation(dat_demographics, "fomo_")
+colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "fomo.constr"
+```
+
+```{r}
+# Fear of Missing Out - Counterfactuals
+dat_demographics <- constructCreation(dat_demographics, "fomo_counterfactuals_")
+colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "counterfactuals.constr"
+```
+
+```{r}
+# Fear of Missing Out - Social comparison
+dat_demographics <- constructCreation(dat_demographics, "fomo_socialcomparison_")
+colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "socialcomparison.constr"
+```
+
+```{r}
+# Fear of Missing Out - Missed opportunities
+dat_demographics <- constructCreation(dat_demographics, "fomo_missedopportunities_")
+colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "missedopportunities.constr"
+```
+
+```{r}
+# Fear of Missing Out - Negative affect
+dat_demographics <- constructCreation(dat_demographics, "fomo_negativeaffect_")
+colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "negativeaffect.constr"
+```
+
+```{r}
+dat <- merge(dat_demographics, dat_messages_clean, by = c("id", "condition"))
+```
+
+## Descriptives and distributions
+### Trait-FOMO
+<p style="text-indent: 25px;"><b>Trait-FOMO.</b> Shapiro-Wilks tests for normality indicate normally distributed values for overall trait-FOMO within each condition (W<sub>themselves</sub> = 0.98, p = 0.62, W<sub>with friends</sub> = 0.97, p = 0.43). This was further affirmed by desnity plots for each condition (Figure 1). Test of equal variances indicated no significant differences (<i>F</i> (42, 42) = 1.1463, <i>p</i> = 0.66) and a two-sided independent sample t-test indicated no differences in trait-FOMO between participants in the "by themselves"-condition (<i>M</i> = 2.80, <i>SD</i> = 0.93) and the "with their friends"-condition (<i>M</i> = 3.06, <i>SD</i> = 0.87); <i>t</i> (83.61) = -1.37, <i>p</i> = 0.17.</p>
+
+<b>Table 1.1</b> Test for normality of FOMO stratified by condition
+```{r}
+with(dat_demographics, shapiro.test(fomo.constr[condition == "By themselves"]))
+with(dat_demographics, shapiro.test(fomo.constr[condition == "With their friends"]))
+```
+
+<b>Table 1.2</b>F-test to compare variances of FOMO between conditions
+```{r}
+res.ftest <- var.test(fomo.constr ~ condition, data = dat_demographics)
+res.ftest
+```
+
+<b>Table 1.3</b> Two sample t-test of FOMO between conditions
+```{r}
+t.test(fomo.constr ~ condition, alternative = "two.sided", var.equal = FALSE, data = dat_demographics)
+```
+
+<b>Table 1.4</b> Descriptives for trait-FOMO
+```{r}
+descriptive_fomo <- describeBy(dat_demographics$fomo.constr, dat_demographics$condition, mat = TRUE, digits = 2)
+names(descriptive_fomo)[names(descriptive_fomo) == 'group1'] = "Condition"
+descriptive_fomo <- as.data.frame(descriptive_fomo[, !(names(descriptive_fomo) %in% drop_descriptives)])
+rownames(descriptive_fomo) <- c()
+descriptive_fomo
+```
+
+<b>Figure 1</b> Density plots of participants' FOMO by condition
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat_demographics, aes(x = fomo.constr, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ condition)
+```
+
+### Message perceptions
+#### List of items
+<ol><li>A trip for one to fly to Las Vegas for an Elite UFC match</li>
+<li>You announce the starting team lineup at the beginning of your favorite baseball team's game</li>
+<li>Ticket for one person to attend every 2021 Showtime Boxing event</li>
+<li>Experience the US Grand Prix-Tour including one Paddock pass to the Grand Prix</li>
+<li>One-Day contract to coach your favorite sports team</li>
+<li>One behind the bench ticket for a game of your favorite sports team</li>
+<li>You workout with your favorite sports team during their pre-season camp</li>
+<li>Have a one-on-one dinner with your favorite celebrity in a five-star restaurant</li>
+<li>Travel with your favorite basketball team on a team charter to an international game</li>
+<li>A trip for you to dive with sharks alongside shark week experts from Discovery Channel</li>
+<li>You join your favorite E-Sports team to game like a pro</li>
+<li>You join your favorite celebrity for a round of golf</li>
+<li>You join Discovery Channel's Deadliest Catch captains for an Alaskan adventure</li>
+<li>Get behind the scenes access to your favorite TV show</li>
+<li>A spa day and five-star dinner just for you</li>
+<li>Take a one-on-one cooking lesson from a celebrity chef and have lunch with them</li>
+<li>One-week luxury vacation in at a location of your choosing</li>
+<li>Meet your favorite artist at their next tour</li>
+<li>Join your favorite celebrity at a photoshoot</li>
+<li>Be featured in your favorite artist's next music video</li>
+<li>Walk the red carpet with the directors and actors at a movie premiere of your choosing</li>
+<li>Attend the E! People's Choice Awards and get backstage passes and go to the after party</li>
+<li>Take weekend trip to Broadway and meet the cast of your favorite show</li>
+<li>Spend a day at an amusement park</li>
+<li>Go bowling</li>
+<li>Go bungee jumping</li>
+<li>Spend a weekend at a ski resort</li>
+<li>Spend a day at a water park with a fast pass for all rides</li>
+<li>Go paintballing</li>
+<li>Learn Yoga from a celebrity teacher and have lunch with them</li>
+<li>Ride a zip line</li>
+<li>See your favorite artist at a music festival</li>
+<li>A weekend getaway in a lake house</li>
+<li>Watch the premiere of a new movie</li>
+<li>Go on a hot air balloon adventure</li>
+<li>Attend the Super Bowl</li>
+<li>Visit the Zion National Park and get an exclusive tour of the park</li>
+<li>Go on a 7-day Trip to Washington D.C.</li>
+<li>Go axe throwing at a sports center</li>
+<li>Take a personalized tour of a Whiskey Distillery</li>
+<li>Front row Tickets to see your favorite comedian</li>
+<li>Go on a 7-day luxury cruise along the West Cost</li>
+<li>Be part of the audience of your favorite talk show and have a meet and greet with the host</li>
+<li>Attend the US Open with an all weekend pass and get a photo op with your favorite tennis player</li>
+<li>Have dinner with your favorite author and get a book signed by them</li>
+<li>Go on a Kayaking trip</li>
+<li>Get front row seats during the New York Fashion week and meet your favorite designer</li>
+<li>Take a camping trip at a national park</li>
+<li>Get an exclusive tour of a Zoo near you and pet baby animals</li>
+<li>Weekend getaway to a hotel by the beach with an all drinks package</li>
+<li>Swim with dolphins at an aquarium</li>
+<li>Solve an escape room by yourself</li></ol>
+
+#### Attractiveness
+<p style="text-indent: 25px;"><b>Attractiveness.</b></p>
+
+<b>Table 2.1</b> Test for normality of FOMO stratified by condition
+```{r}
+with(dat, shapiro.test(attractive[condition == "By themselves"]))
+with(dat, shapiro.test(attractive[condition == "With their friends"]))
+```
+
+<b>Table 2.2</b> F-test to compare variances of FOMO between conditions
+```{r}
+res.ftest <- var.test(attractive ~ condition, data = dat)
+res.ftest
+```
+
+<b>Table 2.3</b> Two sample t-test of FOMO between conditions
+```{r}
+t.test(attractive ~ condition, alternative = "two.sided", var.equal = FALSE, data = dat)
+```
+
+<b>Table 2.4</b> Descriptives for trait-FOMO
+```{r}
+descriptive_condition_attractive <- describeBy(dat$attractive, dat$condition, mat = TRUE, digits = 2)
+names(descriptive_condition_attractive)[names(descriptive_condition_attractive) == 'group1'] = "Condition"
+descriptive_condition_attractive <- as.data.frame(descriptive_condition_attractive[, !(names(descriptive_condition_attractive) %in% drop_descriptives)])
+rownames(descriptive_condition_attractive) <- c()
+descriptive_condition_attractive
+```
+
+<b>Figure 2.1</b> Density plots of participants' FOMO by condition
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat, aes(x = attractive, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ condition)
+```
+
+<b>Figure 2.2</b> Density plots of perceived attractivenss by condition
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = attractive, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ message)
+```
+
+<b>Table 2.5</b> Sorted lost with perceived attractiveness of activity for 'by themselves'-condition
+```{r}
+descriptive_message_attractive <- describeBy(dat$attractive, list(dat$message, dat$condition), mat = TRUE, digits = 2)
+names(descriptive_message_attractive)[names(descriptive_message_attractive) == 'group1'] = "Message"
+descriptive_message_attractive <- as.data.frame(descriptive_message_attractive[, !(names(descriptive_message_attractive) %in% drop_descriptives)])
+rownames(descriptive_message_attractive) <- c()
+descriptive_message_attractive <- descriptive_message_attractive[order(descriptive_message_attractive$mean),]
+tail(descriptive_message_attractive, 10)
+head(descriptive_message_attractive, 10)
+```
+
+<b>Figure 2.3</b> Means of perceived attractiveness in descending order for both conditions
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = reorder(message, attractive), y = attractive, fill = condition)) +
+  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+  apatheme +
+  xlab("Message") +
+  ylab("Attractiveness") +
+  theme(legend.position = "bottom") +
+  coord_flip()
+```
+
+#### Popularity 
+
+<p style="text-indent: 25px;"><b>Popularity.</b></p>
+
+<b>Table 3.1</b> Test for normality of perceived popularity stratified by condition
+```{r}
+with(dat, shapiro.test(popular[condition == "By themselves"]))
+with(dat, shapiro.test(popular[condition == "With their friends"]))
+```
+
+<b>Table 3.2</b>F-test to compare variances of perceived popularity between conditions
+```{r}
+res.ftest <- var.test(popular ~ condition, data = dat)
+res.ftest
+```
+
+<b>Table 3.3</b> Two sample t-test of perceived popularity between conditions
+```{r}
+t.test(popular ~ condition, alternative = "two.sided", var.equal = FALSE, data = dat)
+```
+
+<b>Table 3.4</b> Descriptives for perceived popularity
+```{r}
+descriptive_popular <- describeBy(dat$popular, dat$condition, mat = TRUE, digits = 2)
+names(descriptive_popular)[names(descriptive_popular) == 'group1'] = "Condition"
+descriptive_popular <- as.data.frame(descriptive_popular[, !(names(descriptive_popular) %in% drop_descriptives)])
+rownames(descriptive_popular) <- c()
+descriptive_popular
+```
+
+<b>Figure 3.1</b> Density plots of perceived popularity by condition
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat, aes(x = popular, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ condition)
+```
+
+<b>Figure 3.2</b> Density plots of perceived popularity by condition and activity
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = popular, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ message)
+```
+
+<b>Table 3.5</b> Sorted lost with perceived popularity of activity for 'by themselves'-condition
+```{r}
+descriptive_message_popular <- describeBy(dat$popular, list(dat$message, dat$condition), mat = TRUE, digits = 2)
+names(descriptive_message_popular)[names(descriptive_message_popular) == 'group1'] = "Message"
+descriptive_message_popular <- as.data.frame(descriptive_message_popular[, !(names(descriptive_message_popular) %in% drop_descriptives)])
+rownames(descriptive_message_popular) <- c()
+descriptive_message_popular <- descriptive_message_popular[order(descriptive_message_popular$mean),]
+tail(descriptive_message_popular, 10)
+head(descriptive_message_popular, 10)
+```
+
+<b>Figure 3.3</b> Means of perceived popularity in descending order for both conditions
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = reorder(message, popular), y = popular, fill = condition)) +
+  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+  apatheme +
+  xlab("Message") +
+  ylab("Popularity") +
+  theme(legend.position = "bottom") +
+  coord_flip()
+```
+
+#### Perceived Uniqueness
+
+<p style="text-indent: 25px;"><b>Uniqueness.</b></p>
+
+<b>Table 4.1</b> Test for normality of perceived uniqueness stratified by condition
+```{r}
+with(dat, shapiro.test(unique[condition == "By themselves"]))
+with(dat, shapiro.test(unique[condition == "With their friends"]))
+```
+
+<b>Table 4.2</b>F-test to compare variances of perceived uniqueness between conditions
+```{r}
+res.ftest <- var.test(unique ~ condition, data = dat)
+res.ftest
+```
+
+<b>Table 4.3</b> Two sample t-test of perceived uniqueness between conditions
+```{r}
+t.test(unique ~ condition, alternative = "two.sided", var.equal = FALSE, data = dat)
+```
+
+<b>Table 4.4</b> Descriptives for perceived uniqueness
+```{r}
+descriptive_unique <- describeBy(dat$unique, dat$condition, mat = TRUE, digits = 2)
+names(descriptive_unique)[names(descriptive_unique) == 'group1'] = "Condition"
+descriptive_unique <- as.data.frame(descriptive_unique[, !(names(descriptive_unique) %in% drop_descriptives)])
+rownames(descriptive_unique) <- c()
+descriptive_unique
+```
+
+<b>Figure 4.1</b> Density plots of perceived uniqueness by condition
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat, aes(x = unique, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ condition)
+```
+
+<b>Figure 4.2</b> Density plots of perceived uniqueness by condition and activity
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = unique, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ message)
+```
+
+<b>Table 4.5</b> Sorted lost with perceived uniqueness of activity for 'by themselves'-condition
+```{r}
+descriptive_message_unique <- describeBy(dat$unique, list(dat$message, dat$condition), mat = TRUE, digits = 2)
+names(descriptive_message_unique)[names(descriptive_message_unique) == 'group1'] = "Message"
+descriptive_message_unique <- as.data.frame(descriptive_message_unique[, !(names(descriptive_message_unique) %in% drop_descriptives)])
+rownames(descriptive_message_unique) <- c()
+descriptive_message_unique <- descriptive_message_unique[order(descriptive_message_unique$mean),]
+tail(descriptive_message_unique,10)
+head(descriptive_message_unique,10)
+```
+
+<b>Figure 4.3</b> Means of perceived uniqueness in descending order for both conditions
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = reorder(message, unique), y = unique, fill = condition)) +
+  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+  apatheme +
+  xlab("Message") +
+  ylab("Uniqueness") +
+  theme(legend.position = "bottom") +
+  coord_flip()
+```
+
+#### Familiarity
+
+<p style="text-indent: 25px;"><b>Familiar.</b></p>
+
+<b>Table 5.1</b> Test for normality of familiarity stratified by condition
+```{r}
+with(dat, shapiro.test(familiar[condition == "By themselves"]))
+with(dat, shapiro.test(familiar[condition == "With their friends"]))
+```
+
+<b>Table 5.2</b>F-test to compare variances of familiarity between conditions
+```{r}
+res.ftest <- var.test(familiar ~ condition, data = dat)
+res.ftest
+```
+
+<b>Table 5.3</b> Two sample t-test of familiarity between conditions
+```{r}
+t.test(familiar ~ condition, alternative = "two.sided", var.equal = FALSE, data = dat)
+```
+
+<b>Table 5.4</b> Descriptives for familiarity
+```{r}
+descriptive_familiar <- describeBy(dat$familiar, dat$condition, mat = TRUE, digits = 2)
+names(descriptive_familiar)[names(descriptive_familiar) == 'group1'] = "Condition"
+descriptive_familiar <- as.data.frame(descriptive_familiar[, !(names(descriptive_familiar) %in% drop_descriptives)])
+rownames(descriptive_familiar) <- c()
+descriptive_familiar
+```
+
+<b>Figure 5.1</b> Density plots of familiarity by condition
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat, aes(x = familiar, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ condition)
+```
+
+<b>Figure 5.2</b> Density plots of familiarity by condition and activity
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = familiar, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ message)
+```
+
+<b>Table 5.5</b> Sorted lost with perceived familiarity of activity for 'by themselves'-condition
+```{r}
+descriptive_message_familiar <- describeBy(dat$familiar, list(dat$message, dat$condition), mat = TRUE, digits = 2)
+names(descriptive_message_familiar)[names(descriptive_message_familiar) == 'group1'] = "Message"
+descriptive_message_familiar <- as.data.frame(descriptive_message_familiar[, !(names(descriptive_message_familiar) %in% drop_descriptives)])
+rownames(descriptive_message_familiar) <- c()
+descriptive_message_familiar <- descriptive_message_familiar[order(descriptive_message_familiar$mean),]
+tail(descriptive_message_familiar, 10)
+head(descriptive_message_familiar, 10)
+```
+
+<b>Figure 5.3</b> Means of perceived familiarity in descending order for both conditions
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = reorder(message, familiar), y = familiar, fill = condition)) +
+  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+  apatheme +
+  xlab("Message") +
+  ylab("Familiarity") +
+  theme(legend.position = "bottom") +
+  coord_flip()
+```
+
+#### Self-relevance
+
+<p style="text-indent: 25px;"><b>Self-relevance.</b></p>
+
+<b>Table 6.1</b> Test for normality of self-relevance stratified by condition
+```{r}
+with(dat, shapiro.test(selfrelevance[condition == "By themselves"]))
+with(dat, shapiro.test(selfrelevance[condition == "With their friends"]))
+```
+
+<b>Table 6.2</b>F-test to compare variances of self-relevance between conditions
+```{r}
+res.ftest <- var.test(selfrelevance ~ condition, data = dat)
+res.ftest
+```
+
+<b>Table 6.3</b> Two sample t-test of self-relevance between conditions
+```{r}
+t.test(selfrelevance ~ condition, alternative = "two.sided", var.equal = FALSE, data = dat)
+```
+
+<b>Table 6.4</b> Descriptives for self-relevance
+```{r}
+descriptive_selfrelevance <- describeBy(dat$selfrelevance, dat$condition, mat = TRUE, digits = 2)
+names(descriptive_selfrelevance)[names(descriptive_selfrelevance) == 'group1'] = "Condition"
+descriptive_selfrelevance <- as.data.frame(descriptive_selfrelevance[, !(names(descriptive_selfrelevance) %in% drop_descriptives)])
+rownames(descriptive_selfrelevance) <- c()
+descriptive_selfrelevance
+```
+
+<b>Figure 6.1</b> Density plots of self-relevance by condition
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat, aes(x = selfrelevance, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ condition)
+```
+
+<b>Figure 6.2</b> Density plots of self-relevance by condition and activity
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = selfrelevance, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ message)
+```
+
+<b>Table 6.5</b> Sorted lost with perceived self-relevance of activity for 'by themselves'-condition
+```{r}
+descriptive_message_selfrelevance <- describeBy(dat$selfrelevance, list(dat$message, dat$condition), mat = TRUE, digits = 2)
+names(descriptive_message_selfrelevance)[names(descriptive_message_selfrelevance) == 'group1'] = "Message"
+descriptive_message_selfrelevance <- as.data.frame(descriptive_message_selfrelevance[, !(names(descriptive_message_selfrelevance) %in% drop_descriptives)])
+rownames(descriptive_message_selfrelevance) <- c()
+descriptive_message_selfrelevance <- descriptive_message_selfrelevance[order(descriptive_message_selfrelevance$mean),]
+tail(descriptive_message_selfrelevance, 10)
+head(descriptive_message_selfrelevance, 10)
+```
+
+<b>Figure 6.3</b> Means of perceived self-relevance in descending order for both conditions
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = reorder(message, selfrelevance), y = selfrelevance, fill = condition)) +
+  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+  apatheme +
+  xlab("Message") +
+  ylab("Self-relevance") +
+  theme(legend.position = "bottom") +
+  coord_flip()
+```
+
+#### Experienced FOMO
+
+<p style="text-indent: 25px;"><b>Experienced FOMO.</b></p>
+
+<b>Table 7.1</b> Test for normality of experienced FOMO stratified by condition
+```{r}
+with(dat, shapiro.test(experiencedfomo[condition == "By themselves"]))
+with(dat, shapiro.test(experiencedfomo[condition == "With their friends"]))
+```
+
+<b>Table 7.2</b>F-test to compare variances of experienced FOMO between conditions
+```{r}
+res.ftest <- var.test(experiencedfomo ~ condition, data = dat)
+res.ftest
+```
+
+<b>Table 7.3</b> Two sample t-test of experienced FOMO between conditions
+```{r}
+t.test(experiencedfomo ~ condition, alternative = "two.sided", var.equal = FALSE, data = dat)
+```
+
+<b>Table 7.4</b> Descriptives for experienced FOMO
+```{r}
+descriptive_experiencedfomo <- describeBy(dat$experiencedfomo, dat$condition, mat = TRUE, digits = 2)
+names(descriptive_experiencedfomo)[names(descriptive_experiencedfomo) == 'group1'] = "Condition"
+descriptive_experiencedfomo <- as.data.frame(descriptive_experiencedfomo[, !(names(descriptive_experiencedfomo) %in% drop_descriptives)])
+rownames(descriptive_experiencedfomo) <- c()
+descriptive_experiencedfomo
+```
+
+<b>Figure 7.1</b> Density plots of experienced FOMO by condition
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat, aes(x = experiencedfomo, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ condition)
+```
+
+<b>Figure 7.2</b> Density plots of experienced FOMO by condition and activity
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = experiencedfomo, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ message)
+```
+
+<b>Table 7.5</b> Sorted lost with experienced FOMO of activity for 'by themselves'-condition
+```{r}
+descriptive_message_experiencedfomo <- describeBy(dat$experiencedfomo, list(dat$message, dat$condition), mat = TRUE, digits = 2)
+names(descriptive_message_experiencedfomo)[names(descriptive_message_experiencedfomo) == 'group1'] = "Message"
+descriptive_message_experiencedfomo <- as.data.frame(descriptive_message_experiencedfomo[, !(names(descriptive_message_experiencedfomo) %in% drop_descriptives)])
+rownames(descriptive_message_experiencedfomo) <- c()
+descriptive_message_experiencedfomo <- descriptive_message_experiencedfomo[order(descriptive_message_experiencedfomo$mean),]
+tail(descriptive_message_experiencedfomo, 10)
+head(descriptive_message_experiencedfomo, 10)
+```
+
+<b>Figure 7.3</b> Means of perceived experienced FOMOe in descending order for both conditions
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = reorder(message, experiencedfomo), y = experiencedfomo, fill = condition)) +
+  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+  apatheme +
+  xlab("Message") +
+  ylab("Experienced FOMO") +
+  theme(legend.position = "bottom") +
+  coord_flip()
+```
+
+#### Repeatability of activity
+
+<p style="text-indent: 25px;"><b>Repeatability.</b></p>
+
+<b>Table 8.1</b> Test for normality of repeatability of the activity stratified by condition
+```{r}
+with(dat, shapiro.test(repeatability[condition == "By themselves"]))
+with(dat, shapiro.test(repeatability[condition == "With their friends"]))
+```
+
+<b>Table 8.2</b>F-test to compare variances of repeatability of the activity between conditions
+```{r}
+res.ftest <- var.test(repeatability ~ condition, data = dat)
+res.ftest
+```
+
+<b>Table 8.3</b> Two sample t-test of repeatability of the activity between conditions
+```{r}
+t.test(repeatability ~ condition, alternative = "two.sided", var.equal = FALSE, data = dat)
+```
+
+<b>Table 8.4</b> Descriptives for repeatability of the activity
+```{r}
+descriptive_repeatability <- describeBy(dat$repeatability, dat$condition, mat = TRUE, digits = 2)
+names(descriptive_repeatability)[names(descriptive_repeatability) == 'group1'] = "Condition"
+descriptive_repeatability <- as.data.frame(descriptive_repeatability[, !(names(descriptive_repeatability) %in% drop_descriptives)])
+rownames(descriptive_repeatability) <- c()
+descriptive_repeatability
+```
+
+<b>Figure 8.1</b> Density plots of repeatability of the activity by condition
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat, aes(x = repeatability, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ condition)
+```
+
+<b>Figure 8.2</b> Density plots of repeatability of the activity by condition and activity
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = repeatability, fill = condition)) +
+  geom_density(alpha = 0.5, colour = "white") +
+  jamie.theme +
+  ylab("Density") +
+  xlab("Value") +
+  theme(legend.position = "top") +
+  facet_wrap(~ message)
+```
+
+<b>Table 8.5</b> Sorted lost with perceived repeatability of activity for 'by themselves'-condition
+```{r}
+descriptive_message_repeatability <- describeBy(dat$repeatability, list(dat$message, dat$condition), mat = TRUE, digits = 2)
+names(descriptive_message_repeatability)[names(descriptive_message_repeatability) == 'group1'] = "Message"
+descriptive_message_repeatability <- as.data.frame(descriptive_message_repeatability[, !(names(descriptive_message_repeatability) %in% drop_descriptives)])
+rownames(descriptive_message_repeatability) <- c()
+descriptive_message_repeatability <- descriptive_message_repeatability[order(descriptive_message_repeatability$mean),]
+tail(descriptive_message_repeatability, 10)
+head(descriptive_message_repeatability, 10)
+```
+
+<b>Figure 8.3</b> Means of perceived repeatability in descending order for both conditions
+```{r, fig.width = 8, fig.height = 20}
+ggplot(dat, aes(x = reorder(message, repeatability), y = repeatability, fill = condition)) +
+  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+  apatheme +
+  xlab("Message") +
+  ylab("Repeatability") +
+  theme(legend.position = "bottom") +
+  coord_flip()
+```
+
+## Correlations and summary statistics
+### Correlations
+
+
+```{r results = FALSE}
+dat_aggregate <- dat %>%
+  dplyr::select("id", "attractive", "popular", "unique", "familiar", "selfrelevance", "experiencedfomo", "repeatability", "fomo.constr", "socialcomparison.constr", "counterfactuals.constr", "missedopportunities.constr", "negativeaffect.constr")
+dat_aggregate$id <- as.factor(dat_aggregate$id)
+dat_aggregate <- aggregate(dat_aggregate, by = list(dat_aggregate$id), FUN = mean, na.rm = TRUE)
+
+dat_aggregate <- dat_aggregate %>%
+  dplyr::select("Group.1", "attractive", "popular", "unique", "familiar", "selfrelevance", "experiencedfomo", "repeatability", "fomo.constr", "socialcomparison.constr", "counterfactuals.constr", "missedopportunities.constr", "negativeaffect.constr")
+names(dat_aggregate)[names(dat_aggregate) == 'Group.1'] = "id"
+
+dat_aggregate <- merge(dat_condition, dat_aggregate, by = "id")
+dat_aggregate$condition_social[dat_aggregate$condition == "With their friends"] <- 1
+dat_aggregate$condition_social[is.na(dat_aggregate$condition_social)] <- 0
+
+dat_correlations <- dat_aggregate %>%
+  dplyr::select("attractive", "popular", "unique", "familiar", "selfrelevance", "experiencedfomo", "repeatability", "fomo.constr", "socialcomparison.constr", "counterfactuals.constr", "missedopportunities.constr", "negativeaffect.constr", "condition_social")
+
+correlations <- sjt.corr(dat_correlations, corr.method = "pearson", title = "Correlations", var.labels = c("Perceived attractiveness", "Perceived popularity", "Perceived uniqueness", "Familiarity", "Self-relevance", "Experienced FOMO", "Repeatability", "Trait-FOMO", "FOMO - Social comparison", "FOMO - Counterfactuals", "FOMO - Missed opportunities", "FOMO - Negative affect", "Social condition"), fade.ns = FALSE, digits = 2, triangle = "lower")
+```
+
+### Summary statistics
+
+```{r}
+summary_statistics <- t(round(stat.desc(dat_correlations), 2))
+summary_statistics <- as.data.frame(summary_statistics)
+summary_statistics <- summary_statistics[, !(names(summary_statistics) %in% drop_summarystats)]
+summary_statistics
+```
+
