@@ -37,6 +37,20 @@ library(sjlabelled)
 library(sjstats)
 library(pastecs)
 
+# Multilevel analysis
+library(lme4)
+library(nlme)
+library(ez)
+library(multcomp)
+library(TTR)
+library(lmerTest)
+library(powerlmm)
+
+# Threeway interaction
+library(jtools)
+library(interactions)
+library(effects)
+
 # Convert data to long
 to_long <- function(originalDataSet, keyitem, itemPraefix, category, value, selectionname1, selectionname2){
   dat_temp <- originalDataSet %>%
@@ -190,31 +204,26 @@ table_generaldemographics <- table1(~ age + ethnicity + race + education + incom
 <p style="text-indent: 25px;"><b>Trait-FOMO.</b> We assessed participants' trait Fear of Missing Out based on a 16-item scale developed by Neumann and Rhodes (2020). The scale consists of four dimensions: tendency to socially compare (&alpha; = 0.82, e.g., "You think your friends have more fun than you."), dispositional counterfactual thinking (&alpha; = 0.85, e.g., "You think of all the things you wish you would have done differently."), sensitivity to missed opportunities (&alpha; = 0.83, e.g., "You go back and think about what you could have had."), and trait negative affect (&alpha = 0.85, e.g., "You feel lonely.").</p>
 
 ```{r}
-# Fear of Missing Out
 dat_demographics <- constructCreation(dat_demographics, "fomo_")
 colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "fomo.constr"
 ```
 
 ```{r}
-# Fear of Missing Out - Counterfactuals
 dat_demographics <- constructCreation(dat_demographics, "fomo_counterfactuals_")
 colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "counterfactuals.constr"
 ```
 
 ```{r}
-# Fear of Missing Out - Social comparison
 dat_demographics <- constructCreation(dat_demographics, "fomo_socialcomparison_")
 colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "socialcomparison.constr"
 ```
 
 ```{r}
-# Fear of Missing Out - Missed opportunities
 dat_demographics <- constructCreation(dat_demographics, "fomo_missedopportunities_")
 colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "missedopportunities.constr"
 ```
 
 ```{r}
-# Fear of Missing Out - Negative affect
 dat_demographics <- constructCreation(dat_demographics, "fomo_negativeaffect_")
 colnames(dat_demographics)[which(names(dat_demographics) == "constructName")] <- "negativeaffect.constr"
 ```
@@ -233,7 +242,7 @@ with(dat_demographics, shapiro.test(fomo.constr[condition == "By themselves"]))
 with(dat_demographics, shapiro.test(fomo.constr[condition == "With their friends"]))
 ```
 
-<b>Table 1.2</b>F-test to compare variances of FOMO between conditions
+<b>Table 1.2</b> F-test to compare variances of FOMO between conditions
 ```{r}
 res.ftest <- var.test(fomo.constr ~ condition, data = dat_demographics)
 res.ftest
@@ -320,7 +329,54 @@ ggplot(dat_demographics, aes(x = fomo.constr, fill = condition)) +
 <li>Solve an escape room by yourself</li></ol>
 
 #### Attractiveness
-<p style="text-indent: 25px;"><b>Attractiveness.</b></p>
+
+#### List of items
+<ol><li>A trip for one to fly to Las Vegas for an Elite UFC match</li>
+<li>Have a one-on-one dinner with your favorite celebrity in a five-star restaurant</li>
+<li>Travel with your favorite basketball team on a team charter to an international game</li>
+<li>A trip for you to dive with sharks alongside shark week experts from Discovery Channel</li>
+<li>You join your favorite E-Sports team to game like a pro</li>
+<li>You join your favorite celebrity for a round of golf</li>
+<li>You join Discovery Channel's Deadliest Catch captains for an Alaskan adventure</li>
+<li>Get behind the scenes access to your favorite TV show</li>
+<li>A spa day and five-star dinner just for you</li>
+<li>Take a one-on-one cooking lesson from a celebrity chef and have lunch with them</li>
+<li>One-week luxury vacation in at a location of your choosing</li>
+<li>Meet your favorite artist at their next tour</li>
+<li>Join your favorite celebrity at a photoshoot</li>
+<li>Be featured in your favorite artist's next music video</li>
+<li>Walk the red carpet with the directors and actors at a movie premiere of your choosing</li>
+<li>Attend the E! People's Choice Awards and get backstage passes and go to the after party</li>
+<li>Take weekend trip to Broadway and meet the cast of your favorite show</li>
+<li>Spend a day at an amusement park</li>
+<li>Go bowling</li>
+<li>Go bungee jumping</li>
+<li>Spend a weekend at a ski resort</li>
+<li>Spend a day at a water park with a fast pass for all rides</li>
+<li>Go paintballing</li>
+<li>Learn Yoga from a celebrity teacher and have lunch with them</li>
+<li>Ride a zip line</li>
+<li>See your favorite artist at a music festival</li>
+<li>A weekend getaway in a lake house</li>
+<li>Watch the premiere of a new movie</li>
+<li>Go on a hot air balloon adventure</li>
+<li>Attend the Super Bowl</li>
+<li>Visit the Zion National Park and get an exclusive tour of the park</li>
+<li>Go on a 7-day Trip to Washington D.C.</li>
+<li>Go axe throwing at a sports center</li>
+<li>Take a personalized tour of a Whiskey Distillery</li>
+<li>Front row Tickets to see your favorite comedian</li>
+<li>Go on a 7-day luxury cruise along the West Cost</li>
+<li>Be part of the audience of your favorite talk show and have a meet and greet with the host</li>
+<li>Attend the US Open with an all weekend pass and get a photo op with your favorite tennis player</li>
+<li>Have dinner with your favorite author and get a book signed by them</li>
+<li>Go on a Kayaking trip</li>
+<li>Get front row seats during the New York Fashion week and meet your favorite designer</li>
+<li>Take a camping trip at a national park</li>
+<li>Get an exclusive tour of a Zoo near you and pet baby animals</li>
+<li>Weekend getaway to a hotel by the beach with an all drinks package</li>
+<li>Swim with dolphins at an aquarium</li>
+<li>Solve an escape room by yourself</li></ol>
 
 <b>Table 2.1</b> Test for normality of FOMO stratified by condition
 ```{r}
@@ -373,23 +429,26 @@ ggplot(dat, aes(x = attractive, fill = condition)) +
 <b>Table 2.5</b> Sorted lost with perceived attractiveness of activity for 'by themselves'-condition
 ```{r}
 descriptive_message_attractive <- describeBy(dat$attractive, list(dat$message, dat$condition), mat = TRUE, digits = 2)
-names(descriptive_message_attractive)[names(descriptive_message_attractive) == 'group1'] = "Message"
+names(descriptive_message_attractive)[names(descriptive_message_attractive) == 'group1'] = "message"
 descriptive_message_attractive <- as.data.frame(descriptive_message_attractive[, !(names(descriptive_message_attractive) %in% drop_descriptives)])
 rownames(descriptive_message_attractive) <- c()
 descriptive_message_attractive <- descriptive_message_attractive[order(descriptive_message_attractive$mean),]
-tail(descriptive_message_attractive, 10)
-head(descriptive_message_attractive, 10)
+topattractive <- tail(descriptive_message_attractive, 10)
+topattractive$ranking <- "top"
+bottomattractive <- head(descriptive_message_attractive, 10)
+bottomattractive$ranking <- "bottom"
+dat_attractiveactivities <- rbind(topattractive, bottomattractive)
 ```
 
 <b>Figure 2.3</b> Means of perceived attractiveness in descending order for both conditions
-```{r, fig.width = 8, fig.height = 20}
-ggplot(dat, aes(x = reorder(message, attractive), y = attractive, fill = condition)) +
-  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat_attractiveactivities, aes(x =reorder(message, mean), y = mean, fill = ranking)) +
+  geom_bar(position = "dodge", stat = "identity") +
   apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   xlab("Message") +
   ylab("Attractiveness") +
-  theme(legend.position = "bottom") +
-  coord_flip()
+  theme(legend.position = "bottom")
 ```
 
 #### Popularity 
@@ -402,7 +461,7 @@ with(dat, shapiro.test(popular[condition == "By themselves"]))
 with(dat, shapiro.test(popular[condition == "With their friends"]))
 ```
 
-<b>Table 3.2</b>F-test to compare variances of perceived popularity between conditions
+<b>Table 3.2</b> F-test to compare variances of perceived popularity between conditions
 ```{r}
 res.ftest <- var.test(popular ~ condition, data = dat)
 res.ftest
@@ -447,23 +506,26 @@ ggplot(dat, aes(x = popular, fill = condition)) +
 <b>Table 3.5</b> Sorted lost with perceived popularity of activity for 'by themselves'-condition
 ```{r}
 descriptive_message_popular <- describeBy(dat$popular, list(dat$message, dat$condition), mat = TRUE, digits = 2)
-names(descriptive_message_popular)[names(descriptive_message_popular) == 'group1'] = "Message"
+names(descriptive_message_popular)[names(descriptive_message_popular) == 'group1'] = "message"
 descriptive_message_popular <- as.data.frame(descriptive_message_popular[, !(names(descriptive_message_popular) %in% drop_descriptives)])
 rownames(descriptive_message_popular) <- c()
 descriptive_message_popular <- descriptive_message_popular[order(descriptive_message_popular$mean),]
-tail(descriptive_message_popular, 10)
-head(descriptive_message_popular, 10)
+toppopular <- tail(descriptive_message_popular, 10)
+toppopular$ranking <- "top"
+bottompopular <- head(descriptive_message_popular, 10)
+bottompopular$ranking <- "bottom"
+dat_popularactivities <- rbind(toppopular, bottompopular)
 ```
 
-<b>Figure 3.3</b> Means of perceived popularity in descending order for both conditions
-```{r, fig.width = 8, fig.height = 20}
-ggplot(dat, aes(x = reorder(message, popular), y = popular, fill = condition)) +
-  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+<b>Figure 2.3</b> Means of perceived attractiveness in descending order for both conditions
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat_popularactivities, aes(x = reorder(message, mean), y = mean, fill = ranking)) +
+  geom_bar(position = "dodge", stat = "identity") +
   apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   xlab("Message") +
   ylab("Popularity") +
-  theme(legend.position = "bottom") +
-  coord_flip()
+  theme(legend.position = "bottom")
 ```
 
 #### Perceived Uniqueness
@@ -476,7 +538,7 @@ with(dat, shapiro.test(unique[condition == "By themselves"]))
 with(dat, shapiro.test(unique[condition == "With their friends"]))
 ```
 
-<b>Table 4.2</b>F-test to compare variances of perceived uniqueness between conditions
+<b>Table 4.2</b> F-test to compare variances of perceived uniqueness between conditions
 ```{r}
 res.ftest <- var.test(unique ~ condition, data = dat)
 res.ftest
@@ -521,23 +583,26 @@ ggplot(dat, aes(x = unique, fill = condition)) +
 <b>Table 4.5</b> Sorted lost with perceived uniqueness of activity for 'by themselves'-condition
 ```{r}
 descriptive_message_unique <- describeBy(dat$unique, list(dat$message, dat$condition), mat = TRUE, digits = 2)
-names(descriptive_message_unique)[names(descriptive_message_unique) == 'group1'] = "Message"
+names(descriptive_message_unique)[names(descriptive_message_unique) == 'group1'] = "message"
 descriptive_message_unique <- as.data.frame(descriptive_message_unique[, !(names(descriptive_message_unique) %in% drop_descriptives)])
 rownames(descriptive_message_unique) <- c()
 descriptive_message_unique <- descriptive_message_unique[order(descriptive_message_unique$mean),]
-tail(descriptive_message_unique,10)
-head(descriptive_message_unique,10)
+topunique <- tail(descriptive_message_unique, 10)
+topunique$ranking <- "top"
+bottomunique <- head(descriptive_message_unique, 10)
+bottomunique$ranking <- "bottom"
+dat_uniqueactivities <- rbind(topunique, bottomunique)
 ```
 
-<b>Figure 4.3</b> Means of perceived uniqueness in descending order for both conditions
-```{r, fig.width = 8, fig.height = 20}
-ggplot(dat, aes(x = reorder(message, unique), y = unique, fill = condition)) +
-  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+<b>Figure 2.3</b> Means of perceived attractiveness in descending order for both conditions
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat_uniqueactivities, aes(x = reorder(message, mean), y = mean, fill = ranking)) +
+  geom_bar(position = "dodge", stat = "identity") +
   apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   xlab("Message") +
   ylab("Uniqueness") +
-  theme(legend.position = "bottom") +
-  coord_flip()
+  theme(legend.position = "bottom")
 ```
 
 #### Familiarity
@@ -550,7 +615,7 @@ with(dat, shapiro.test(familiar[condition == "By themselves"]))
 with(dat, shapiro.test(familiar[condition == "With their friends"]))
 ```
 
-<b>Table 5.2</b>F-test to compare variances of familiarity between conditions
+<b>Table 5.2</b> F-test to compare variances of familiarity between conditions
 ```{r}
 res.ftest <- var.test(familiar ~ condition, data = dat)
 res.ftest
@@ -595,23 +660,26 @@ ggplot(dat, aes(x = familiar, fill = condition)) +
 <b>Table 5.5</b> Sorted lost with perceived familiarity of activity for 'by themselves'-condition
 ```{r}
 descriptive_message_familiar <- describeBy(dat$familiar, list(dat$message, dat$condition), mat = TRUE, digits = 2)
-names(descriptive_message_familiar)[names(descriptive_message_familiar) == 'group1'] = "Message"
+names(descriptive_message_familiar)[names(descriptive_message_familiar) == 'group1'] = "message"
 descriptive_message_familiar <- as.data.frame(descriptive_message_familiar[, !(names(descriptive_message_familiar) %in% drop_descriptives)])
 rownames(descriptive_message_familiar) <- c()
 descriptive_message_familiar <- descriptive_message_familiar[order(descriptive_message_familiar$mean),]
-tail(descriptive_message_familiar, 10)
-head(descriptive_message_familiar, 10)
+topfamiliar <- tail(descriptive_message_familiar, 10)
+topfamiliar$ranking <- "top"
+bottomfamiliar <- head(descriptive_message_familiar, 10)
+bottomfamiliar$ranking <- "bottom"
+dat_familiaractivities <- rbind(topfamiliar, bottomfamiliar)
 ```
 
-<b>Figure 5.3</b> Means of perceived familiarity in descending order for both conditions
-```{r, fig.width = 8, fig.height = 20}
-ggplot(dat, aes(x = reorder(message, familiar), y = familiar, fill = condition)) +
-  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+<b>Figure 2.3</b> Means of perceived attractiveness in descending order for both conditions
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat_familiaractivities, aes(x = reorder(message, mean), y = mean, fill = ranking)) +
+  geom_bar(position = "dodge", stat = "identity") +
   apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   xlab("Message") +
   ylab("Familiarity") +
-  theme(legend.position = "bottom") +
-  coord_flip()
+  theme(legend.position = "bottom")
 ```
 
 #### Self-relevance
@@ -624,7 +692,7 @@ with(dat, shapiro.test(selfrelevance[condition == "By themselves"]))
 with(dat, shapiro.test(selfrelevance[condition == "With their friends"]))
 ```
 
-<b>Table 6.2</b>F-test to compare variances of self-relevance between conditions
+<b>Table 6.2</b> F-test to compare variances of self-relevance between conditions
 ```{r}
 res.ftest <- var.test(selfrelevance ~ condition, data = dat)
 res.ftest
@@ -669,23 +737,26 @@ ggplot(dat, aes(x = selfrelevance, fill = condition)) +
 <b>Table 6.5</b> Sorted lost with perceived self-relevance of activity for 'by themselves'-condition
 ```{r}
 descriptive_message_selfrelevance <- describeBy(dat$selfrelevance, list(dat$message, dat$condition), mat = TRUE, digits = 2)
-names(descriptive_message_selfrelevance)[names(descriptive_message_selfrelevance) == 'group1'] = "Message"
+names(descriptive_message_selfrelevance)[names(descriptive_message_selfrelevance) == 'group1'] = "message"
 descriptive_message_selfrelevance <- as.data.frame(descriptive_message_selfrelevance[, !(names(descriptive_message_selfrelevance) %in% drop_descriptives)])
 rownames(descriptive_message_selfrelevance) <- c()
 descriptive_message_selfrelevance <- descriptive_message_selfrelevance[order(descriptive_message_selfrelevance$mean),]
-tail(descriptive_message_selfrelevance, 10)
-head(descriptive_message_selfrelevance, 10)
+topselfrelevance <- tail(descriptive_message_selfrelevance, 10)
+topselfrelevance$ranking <- "top"
+bottomselfrelevance <- head(descriptive_message_selfrelevance, 10)
+bottomselfrelevance$ranking <- "bottom"
+dat_selfrelevanceactivities <- rbind(topselfrelevance, bottomselfrelevance)
 ```
 
-<b>Figure 6.3</b> Means of perceived self-relevance in descending order for both conditions
-```{r, fig.width = 8, fig.height = 20}
-ggplot(dat, aes(x = reorder(message, selfrelevance), y = selfrelevance, fill = condition)) +
-  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+<b>Figure 2.3</b> Means of perceived attractiveness in descending order for both conditions
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat_selfrelevanceactivities, aes(x = reorder(message, mean), y = mean, fill = ranking)) +
+  geom_bar(position = "dodge", stat = "identity") +
   apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   xlab("Message") +
-  ylab("Self-relevance") +
-  theme(legend.position = "bottom") +
-  coord_flip()
+  ylab("Sel-relevance") +
+  theme(legend.position = "bottom")
 ```
 
 #### Experienced FOMO
@@ -698,7 +769,7 @@ with(dat, shapiro.test(experiencedfomo[condition == "By themselves"]))
 with(dat, shapiro.test(experiencedfomo[condition == "With their friends"]))
 ```
 
-<b>Table 7.2</b>F-test to compare variances of experienced FOMO between conditions
+<b>Table 7.2</b> F-test to compare variances of experienced FOMO between conditions
 ```{r}
 res.ftest <- var.test(experiencedfomo ~ condition, data = dat)
 res.ftest
@@ -743,23 +814,26 @@ ggplot(dat, aes(x = experiencedfomo, fill = condition)) +
 <b>Table 7.5</b> Sorted lost with experienced FOMO of activity for 'by themselves'-condition
 ```{r}
 descriptive_message_experiencedfomo <- describeBy(dat$experiencedfomo, list(dat$message, dat$condition), mat = TRUE, digits = 2)
-names(descriptive_message_experiencedfomo)[names(descriptive_message_experiencedfomo) == 'group1'] = "Message"
+names(descriptive_message_experiencedfomo)[names(descriptive_message_experiencedfomo) == 'group1'] = "message"
 descriptive_message_experiencedfomo <- as.data.frame(descriptive_message_experiencedfomo[, !(names(descriptive_message_experiencedfomo) %in% drop_descriptives)])
 rownames(descriptive_message_experiencedfomo) <- c()
 descriptive_message_experiencedfomo <- descriptive_message_experiencedfomo[order(descriptive_message_experiencedfomo$mean),]
-tail(descriptive_message_experiencedfomo, 10)
-head(descriptive_message_experiencedfomo, 10)
+topexperiencedfomo <- tail(descriptive_message_experiencedfomo, 10)
+topexperiencedfomo$ranking <- "top"
+bottomexperiencedfomo <- head(descriptive_message_experiencedfomo, 10)
+bottomexperiencedfomo$ranking <- "bottom"
+dat_experiencedfomoactivities <- rbind(topexperiencedfomo, bottomexperiencedfomo)
 ```
 
-<b>Figure 7.3</b> Means of perceived experienced FOMOe in descending order for both conditions
-```{r, fig.width = 8, fig.height = 20}
-ggplot(dat, aes(x = reorder(message, experiencedfomo), y = experiencedfomo, fill = condition)) +
-  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+<b>Figure 2.3</b> Means of perceived attractiveness in descending order for both conditions
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat_experiencedfomoactivities, aes(x = reorder(message, mean), y = mean, fill = ranking)) +
+  geom_bar(position = "dodge", stat = "identity") +
   apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   xlab("Message") +
   ylab("Experienced FOMO") +
-  theme(legend.position = "bottom") +
-  coord_flip()
+  theme(legend.position = "bottom")
 ```
 
 #### Repeatability of activity
@@ -772,7 +846,7 @@ with(dat, shapiro.test(repeatability[condition == "By themselves"]))
 with(dat, shapiro.test(repeatability[condition == "With their friends"]))
 ```
 
-<b>Table 8.2</b>F-test to compare variances of repeatability of the activity between conditions
+<b>Table 8.2</b> F-test to compare variances of repeatability of the activity between conditions
 ```{r}
 res.ftest <- var.test(repeatability ~ condition, data = dat)
 res.ftest
@@ -817,28 +891,29 @@ ggplot(dat, aes(x = repeatability, fill = condition)) +
 <b>Table 8.5</b> Sorted lost with perceived repeatability of activity for 'by themselves'-condition
 ```{r}
 descriptive_message_repeatability <- describeBy(dat$repeatability, list(dat$message, dat$condition), mat = TRUE, digits = 2)
-names(descriptive_message_repeatability)[names(descriptive_message_repeatability) == 'group1'] = "Message"
+names(descriptive_message_repeatability)[names(descriptive_message_repeatability) == 'group1'] = "message"
 descriptive_message_repeatability <- as.data.frame(descriptive_message_repeatability[, !(names(descriptive_message_repeatability) %in% drop_descriptives)])
 rownames(descriptive_message_repeatability) <- c()
 descriptive_message_repeatability <- descriptive_message_repeatability[order(descriptive_message_repeatability$mean),]
-tail(descriptive_message_repeatability, 10)
-head(descriptive_message_repeatability, 10)
+toprepeatability <- tail(descriptive_message_repeatability, 10)
+toprepeatability$ranking <- "top"
+bottomrepeatability <- head(descriptive_message_repeatability, 10)
+bottomrepeatability$ranking <- "bottom"
+dat_repeatabilityactivities <- rbind(toprepeatability, bottomrepeatability)
 ```
 
-<b>Figure 8.3</b> Means of perceived repeatability in descending order for both conditions
-```{r, fig.width = 8, fig.height = 20}
-ggplot(dat, aes(x = reorder(message, repeatability), y = repeatability, fill = condition)) +
-  geom_bar(position = "dodge", stat = "summary", fun.y = "mean") +
+<b>Figure 2.3</b> Means of perceived attractiveness in descending order for both conditions
+```{r, fig.width = 8, fig.height = 5}
+ggplot(dat_repeatabilityactivities, aes(x = reorder(message, mean), y = mean, fill = ranking)) +
+  geom_bar(position = "dodge", stat = "identity") +
   apatheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   xlab("Message") +
   ylab("Repeatability") +
-  theme(legend.position = "bottom") +
-  coord_flip()
+  theme(legend.position = "bottom")
 ```
 
 ## Correlations and summary statistics
-### Correlations
-
 
 ```{r results = FALSE}
 dat_aggregate <- dat %>%
@@ -860,8 +935,6 @@ dat_correlations <- dat_aggregate %>%
 correlations <- sjt.corr(dat_correlations, corr.method = "pearson", title = "Correlations", var.labels = c("Perceived attractiveness", "Perceived popularity", "Perceived uniqueness", "Familiarity", "Self-relevance", "Experienced FOMO", "Repeatability", "Trait-FOMO", "FOMO - Social comparison", "FOMO - Counterfactuals", "FOMO - Missed opportunities", "FOMO - Negative affect", "Social condition"), fade.ns = FALSE, digits = 2, triangle = "lower")
 ```
 
-### Summary statistics
-
 ```{r}
 summary_statistics <- t(round(stat.desc(dat_correlations), 2))
 summary_statistics <- as.data.frame(summary_statistics)
@@ -869,3 +942,102 @@ summary_statistics <- summary_statistics[, !(names(summary_statistics) %in% drop
 summary_statistics
 ```
 
+## Multilevel regression
+
+```{r}
+model_fomo <- lmer(scale(experiencedfomo) ~ condition * fomo.constr + familiar + selfrelevance + repeatability + ( 1 | id ), data = dat)
+summary(model_fomo)
+```
+
+```{r}
+model_attractive <- lmer(scale(attractive) ~ condition * fomo.constr + familiar + selfrelevance + repeatability + ( 1 | id ), data = dat)
+summary(model_attractive)
+```
+
+```{r}
+model_unique <- lmer(scale(unique) ~ condition * fomo.constr + familiar + selfrelevance + repeatability + ( 1 | id ), data = dat)
+summary(model_unique)
+```
+
+```{r}
+model_popular <- lmer(scale(popular) ~ condition * fomo.constr + familiar + selfrelevance + repeatability + ( 1 | id ), data = dat)
+summary(model_popular)
+```
+
+```{r results = FALSE}
+table <- sjPlot::tab_model(model_fomo, model_attractive, model_unique, model_popular)
+```
+
+## Multilevel replication
+
+```{r}
+model_fomo2 <- lme(scale(experiencedfomo) ~ fomo.constr * selfrelevance * condition, random = ~1 | id, data = dat, na.action = na.exclude)
+
+fomoupper <- mean(dat$fomo.constr, na.rm = TRUE) + sd(dat$fomo.constr, na.rm = TRUE)
+fomolower <- mean(dat$fomo.constr, na.rm = TRUE) - sd(dat$fomo.constr, na.rm = TRUE)
+selfrelevanceupper <- mean(dat$selfrelevance, na.rm = TRUE) + sd(dat$selfrelevance, na.rm = TRUE)
+selfrelevancelower <- mean(dat$selfrelevance, na.rm = TRUE) - sd(dat$selfrelevance, na.rm = TRUE)
+
+effectsfomoxrelevance <- effect(term = "fomo.constr:selfrelevance:condition", xlevels= list(fomo.constr = c(fomolower, fomoupper), selfrelevance = c(selfrelevancelower, selfrelevanceupper)), mod = model_fomo2)
+dat_effectsfomoxrelevance <- as.data.frame(effectsfomoxrelevance)
+
+dat_effectsfomoxrelevance$fomo.constr <- as.factor(dat_effectsfomoxrelevance$fomo.constr)
+dat_effectsfomoxrelevance$selfrelevance <- as.factor(dat_effectsfomoxrelevance$selfrelevance)
+dat_effectsfomoxrelevance$fomo.constr <- recode_factor(dat_effectsfomoxrelevance$fomo.constr,'2.03252497411602' = "-1SD Trait-FOMO", '3.82648665379096' = "+1SD Trait-FOMO")
+dat_effectsfomoxrelevance$selfrelevance <- recode_factor(dat_effectsfomoxrelevance$selfrelevance, '2.47096776015285' = "-1SD Self-relevance", '8.6515086866843' = "+1SD Self-relevance")
+
+ggplot(dat_effectsfomoxrelevance, aes(x = selfrelevance, y = fit, color = fomo.constr, group = fomo.constr)) + 
+    geom_point() + 
+    geom_line(size = 1.2) +
+    labs(title = "Threeway interaction", x = "Self-relevance", y = "Experienced FOMO", color = "Trait-FOMO", fill = "Trait-FOMO") +
+  theme_classic() +
+  facet_wrap(~condition)
+```
+
+```{r}
+model_fomo3 <- lme(scale(experiencedfomo) ~ fomo.constr * attractive * condition, random = ~1 |id, data = dat, na.action = na.exclude)
+
+fomoupper <- mean(dat$fomo.constr, na.rm = TRUE) + sd(dat$fomo.constr, na.rm = TRUE)
+fomolower <- mean(dat$fomo.constr, na.rm = TRUE) - sd(dat$fomo.constr, na.rm = TRUE)
+attractiveupper <- mean(dat$attractive, na.rm = TRUE) + sd(dat$attractive, na.rm = TRUE)
+attractivelower <- mean(dat$attractive, na.rm = TRUE) - sd(dat$attractive, na.rm = TRUE)
+
+effectsfomoxattractive <- effect(term = "fomo.constr:attractive:condition", xlevels= list(fomo.constr = c(fomolower, fomoupper), attractive = c(attractivelower, attractiveupper)), mod = model_fomo3)
+dat_effectsfomoxattractive <- as.data.frame(effectsfomoxattractive)
+
+dat_effectsfomoxattractive$fomo.constr <- as.factor(dat_effectsfomoxattractive$fomo.constr)
+dat_effectsfomoxattractive$attractive <- as.factor(dat_effectsfomoxattractive$attractive)
+dat_effectsfomoxattractive$fomo.constr <- recode_factor(dat_effectsfomoxattractive$fomo.constr,'2.03252497411602' = "-1SD Trait-FOMO", '3.82648665379096' = "+1SD Trait-FOMO")
+dat_effectsfomoxattractive$attractive <- recode_factor(dat_effectsfomoxattractive$attractive, '2.75209164221774' = "-1SD Attractiveness", '8.78547544186097' = "+1SD Attractiveness")
+
+ggplot(dat_effectsfomoxattractive, aes(x = attractive, y = fit, color = fomo.constr, group = fomo.constr)) + 
+    geom_point() + 
+    geom_line(size = 1.2) +
+    labs(title = "Threeway interaction", x = "Attractiveness", y = "Experienced FOMO", color = "Trait-FOMO", fill = "Trait-FOMO") +
+  theme_classic() +
+  facet_wrap(~condition)
+```
+
+```{r}
+model_fomo4 <- lme(scale(experiencedfomo) ~ fomo.constr * popular * condition, random = ~1 |id, data = dat, na.action = na.exclude)
+
+fomoupper <- mean(dat$fomo.constr, na.rm = TRUE) + sd(dat$fomo.constr, na.rm = TRUE)
+fomolower <- mean(dat$fomo.constr, na.rm = TRUE) - sd(dat$fomo.constr, na.rm = TRUE)
+popularupper <- mean(dat$popular, na.rm = TRUE) + sd(dat$popular, na.rm = TRUE)
+popularlower <- mean(dat$popular, na.rm = TRUE) - sd(dat$popular, na.rm = TRUE)
+
+effectsfomoxpopular <- effect(term = "fomo.constr:popular:condition", xlevels= list(fomo.constr = c(fomolower, fomoupper), popular = c(popularlower, popularupper)), mod = model_fomo4)
+dat_effectsfomoxpopular <- as.data.frame(effectsfomoxpopular)
+
+dat_effectsfomoxpopular$fomo.constr <- as.factor(dat_effectsfomoxpopular$fomo.constr)
+dat_effectsfomoxpopular$popular <- as.factor(dat_effectsfomoxpopular$popular)
+dat_effectsfomoxpopular$fomo.constr <- recode_factor(dat_effectsfomoxpopular$fomo.constr,'2.03252497411602' = "-1SD Trait-FOMO", '3.82648665379096' = "+1SD Trait-FOMO")
+dat_effectsfomoxpopular$popular <- recode_factor(dat_effectsfomoxpopular$popular, '2.84647272632792' = "-1SD Popularity", '8.71077235417297' = "+1SD Popularity")
+
+ggplot(dat_effectsfomoxpopular, aes(x = popular, y = fit, color = fomo.constr, group = fomo.constr)) + 
+    geom_point() + 
+    geom_line(size = 1.2) +
+    labs(title = "Threeway interaction", x = "Popularity", y = "Experienced FOMO", color = "Trait-FOMO", fill = "Trait-FOMO") +
+  theme_classic() +
+  facet_wrap(~condition)
+```
